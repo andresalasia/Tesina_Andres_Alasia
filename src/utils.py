@@ -4,6 +4,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+from datetime import datetime
+from os import mkdir
 from pyprojroot import here
 
 from uf3.representation import bspline
@@ -14,10 +16,58 @@ from uf3.forcefield import calculator
 from uf3.forcefield.properties import phonon
 
 # Paths
+CURRENT_HOUR = datetime.now().strftime('%y_%m_%d_%H_%M')
 ROOT = here()
 DATA_PATH = ROOT / "data"
 DATA_IN_PATH = DATA_PATH / "in"
 DATA_OUT_PATH = DATA_PATH / "out"
+DATA_SELEC_HYP = DATA_OUT_PATH / CURRENT_HOUR
+mkdir(DATA_SELEC_HYP)
+
+
+# Params
+# Lista de elementos
+element_list = ['Ti', 'Ba', 'O']  
+# Radios de corte para el potencial, es decir, región donde se calcula el potencial
+r_min_map = {("O", "O"): 0.001,
+             ("O", "Ti"): 0.001,
+             ("O", "Ba"): 0.001,
+             ("Ba", "Ba"): 0.001,
+             ("Ba", "Ti"): 0.001,
+             ("Ti", "Ti"): 0.001,
+            }
+r_max_map_2 = {("O", "O"): 4.42,
+             ("O", "Ti"): 4.0,
+             ("O", "Ba"): 4.5,
+             ("Ba", "Ba"): 5.2,
+             ("Ba", "Ti"): 4.07,
+             ("Ti", "Ti"): 5.2,
+            }
+r_max_map_3 = {("O", "O"): 5.24,
+             ("Ti", "O"): 4.0,
+             ("Ba", "O"): 6.55,
+             ("Ba", "Ba"): 7.155,
+             ("Ba", "Ti"): 9.065,
+             ("Ti", "Ti"): 7.155,
+            }
+# Distancia mínima observada entre iones en el conjunto de estructuras, para cada par 
+r_min_obs = {("O", "O"): 2.34,
+             ("Ti", "O"): 1.28,
+             ("Ba", "O"): 2.04,
+             ("Ba", "Ba"): 3.35,
+             ("Ba", "Ti"): 2.65,
+             ("Ti", "Ti"): 3.51,
+            }
+
+def get_r_max_dict(n_vecinos):
+    if n_vecinos == 2:
+        r_max_map_dict = {2:r_max_map_2}
+    elif n_vecinos == 3:
+        r_max_map_dict = {3:r_max_map_3}
+    elif n_vecinos == [2,3]:
+        r_max_map_dict = {2:r_max_map_2,3:r_max_map_3}
+    return r_max_map_dict
+
 
 def create_res_map(n_splines,chemical_system):
     """
@@ -64,11 +114,11 @@ def plot_err(y_e,p_e,y_f,p_f,kappa,n_vecinos,n_splines,reg_1b,curv_2b):
     """
     plotting.density_scatter(y_e, p_e, cmap='seismic')
     plt.tight_layout()
-    plt.savefig(f'error_e/rmse_e{n_vecinos}_vecinos_kappa_{int(kappa*1000)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}',
+    plt.savefig(DATA_SELEC_HYP / f'error_e/rmse_e{n_vecinos}_vecinos_kappa_{int(kappa*1000)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}',
                 bbox_inches='tight')
     plotting.density_scatter(y_f, p_f, cmap='seismic')
     plt.tight_layout()
-    plt.savefig(f'error_f/rmse_f{n_vecinos}_vecinos_kappa_{int(kappa*1000)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}',
+    plt.savefig(DATA_SELEC_HYP / f'error_f/rmse_f{n_vecinos}_vecinos_kappa_{int(kappa*1000)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}',
                 bbox_inches='tight')
 
 def plot_pot(bspline_config,solutions,kappa,n_vecinos,n_splines,reg_1b,curv_2b,zoom=False):
@@ -108,7 +158,7 @@ def plot_pot(bspline_config,solutions,kappa,n_vecinos,n_splines,reg_1b,curv_2b,z
                                     ax=axes[1][j-3])
                 axes[1][j-3].set_title("-".join(interaction))
         fig.tight_layout()
-        plt.savefig(f'pot/potenciales{n_vecinos}_vecinos_kappa_{int(kappa*100)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}')
+        plt.savefig(DATA_SELEC_HYP / f'pot/potenciales{n_vecinos}_vecinos_kappa_{int(kappa*100)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}')
     else:
         fig, axes = plt.subplots(2, 3, figsize=(15, 6), dpi=200)
         for j, interaction in enumerate(bspline_config.interactions_map[2]):
@@ -127,7 +177,7 @@ def plot_pot(bspline_config,solutions,kappa,n_vecinos,n_splines,reg_1b,curv_2b,z
                 axes[1][j-3].set_title("-".join(interaction))
                 axes[1][j-3].set_ylim(-0.05, 0.015)
         fig.tight_layout()
-        plt.savefig(f'pot/potenciales{n_vecinos}_vecinos_kappa_{int(kappa*100)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}_zoom')
+        plt.savefig(DATA_SELEC_HYP / f'pot/potenciales{n_vecinos}_vecinos_kappa_{int(kappa*100)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}_zoom')
 
 def run_selec_hyper(chemical_system,n_splines_list,rango_reg_1,rango_reg_2,pesos_fuerza_energia,r_min_map,
                     r_max_map_dict,r_min_obs,df_data,client,energy_key,n_batches,training_keys,holdout_keys,
@@ -257,6 +307,8 @@ def run_selec_hyper(chemical_system,n_splines_list,rango_reg_1,rango_reg_2,pesos
                             
                             # Graficas
                             if plot:
+                                for folder in ['error_e', 'error_f', 'pot', 'fonones']:
+                                    mkdir(DATA_SELEC_HYP / folder)
                                 # Plotear y guardar gráficas errores
                                 plot_err(y_e,p_e,y_f,p_f,kappa,n_splines,reg_1b,curv_2b)                            
 
@@ -269,14 +321,14 @@ def run_selec_hyper(chemical_system,n_splines_list,rango_reg_1,rango_reg_2,pesos
                                 calc = calculator.UFCalculator(model)
                                 force_constants, path_data, bands_dict = calc.get_phonon_data(atoms=estruct, n_super=3, disp=0.05)
                                 fig_ax=phonon.plot_phonon_spectrum(path_data=path_data,bands_dict=bands_dict, lw=0.3)
-                                plt.savefig(f'fonones/fonones_{n_vecinos}_vecinos_kappa_{int(kappa*100)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}')
+                                plt.savefig(DATA_SELEC_HYP / f'fonones/fonones_{n_vecinos}_vecinos_kappa_{int(kappa*100)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}')
                                 plt.close('all')
             # Guardado parcial y final de la info
             dataframe_resultados_splines = pd.DataFrame(dict_resultados)
-            dataframe_resultados_splines.to_csv(f'resultados_{n_splines}_{n_vecinos}.csv')
+            dataframe_resultados_splines.to_csv(DATA_SELEC_HYP / f'resultados_{n_splines}_{n_vecinos}.csv')
 
     # Guardado de modelos no ajustados 
     df_bad = pd.DataFrame(bad_model)
-    df_bad.to_csv('bad_models.csv')
+    df_bad.to_csv(DATA_SELEC_HYP / 'bad_models.csv')
 
     return dict_resultados
