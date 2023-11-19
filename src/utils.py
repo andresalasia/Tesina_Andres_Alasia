@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
-from os import mkdir
+from os import mkdir, path
 from pyprojroot import here
 
 from uf3.representation import bspline
@@ -308,9 +308,10 @@ def run_selec_hyper(chemical_system,n_splines_list,rango_reg_1,rango_reg_2,pesos
                             # Graficas
                             if plot:
                                 for folder in ['error_e', 'error_f', 'pot', 'fonones']:
-                                    mkdir(DATA_SELEC_HYP / folder)
+                                    if not path.exists(DATA_SELEC_HYP / folder):
+                                        mkdir(DATA_SELEC_HYP / folder)
                                 # Plotear y guardar gráficas errores
-                                plot_err(y_e,p_e,y_f,p_f,kappa,n_splines,reg_1b,curv_2b)                            
+                                plot_err(y_e,p_e,y_f,p_f,kappa,n_vecinos,n_splines,reg_1b,curv_2b)                            
 
                                 # Plotear potenciales
                                 solutions = least_squares.arrange_coefficients(model.coefficients,
