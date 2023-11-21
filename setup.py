@@ -13,6 +13,6 @@ def get_requirements():
 setup(
     name="src",
     packages=find_packages(),
-    install_requires=get_requirements(),
+    install_requires=get_requirements(), # Vacío porque seguí un template para crear esto
     version="0.1.0",
 )
