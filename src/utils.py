@@ -52,10 +52,10 @@ r_max_map_3 = {("O", "O"): 5.24,
             }
 # Distancia mínima observada entre iones en el conjunto de estructuras, para cada par 
 r_min_obs = {("O", "O"): 2.34,
-             ("Ti", "O"): 1.28,
-             ("Ba", "O"): 2.04,
+             ("O", "Ti"): 1.28,
+             ("O", "Ba"): 2.04,
              ("Ba", "Ba"): 3.35,
-             ("Ba", "Ti"): 2.65,
+             ("Ti", "Ba"): 2.65,
              ("Ti", "Ti"): 3.51,
             }
 
