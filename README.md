@@ -8,6 +8,7 @@ Ubicados en la raíz del proyecto correr las siguientes líneas
 
 ```shell
 conda create -n tesina python=3.7.15
+conda activate tesina
 pip install wheel
 pip install numba
 pip install -e .
