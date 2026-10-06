@@ -5,3 +5,14 @@ PKG-INFO
 requires.txt
 SOURCES.txt
 top_level.txt
+
+# Entorno Python y archivos generados
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+dist/
+build/
+.DS_Store
+data/out/*/
