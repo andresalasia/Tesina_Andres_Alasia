@@ -1,6 +1,6 @@
 [project]
 name = "tesina-andres-alasia"
-version = "0.1.0"
+version = "0.2.0"
 description = "Modelos interatómicos y selección de hiperparámetros para la tesina de Licenciatura en Física."
 authors = [{name = "Andrés Alasia"}]
 readme = "README.md"
@@ -27,12 +27,21 @@ dependencies = [
     "spglib>=2,<3",
 ]
 
+[project.scripts]
+tesina = "tesina.cli:main"
+
 [project.optional-dependencies]
 elastic-constants = ["elastic>=5,<6"]
 
 [tool.poetry]
-packages = [{include = "src"}]
+packages = [{include = "src"}, {include = "tesina"}]
 requires-poetry = ">=2.0"
+include = [
+    {path = "configs", format = "sdist"},
+    {path = "scripts", format = "sdist"},
+    {path = "tests", format = "sdist"},
+    {path = "docs", format = "sdist"},
+]
 
 [tool.poetry.group.notebooks.dependencies]
 ipykernel = ">=6,<7"

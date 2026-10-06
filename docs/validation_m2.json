@@ -1,0 +1,54 @@
+{
+  "archived_M2": {
+    "rmse_energy_meV_atom": {
+      "actual": 3.8711425126832038,
+      "expected": 3.8711425,
+      "tolerance": 0.0001,
+      "passed": true
+    },
+    "rmse_force_meV_A": {
+      "actual": 134.4983451975146,
+      "expected": 134.4983452,
+      "tolerance": 0.0001,
+      "passed": true
+    },
+    "a0_A": {
+      "actual": 3.981418955109842,
+      "expected": 3.981419,
+      "tolerance": 0.0001,
+      "passed": true
+    },
+    "bulk_GPa": {
+      "actual": 137.03826533153213,
+      "expected": 137.0383,
+      "tolerance": 0.05,
+      "passed": true
+    }
+  },
+  "versions": {
+    "python": "3.12.7",
+    "uf3": "0.4.0",
+    "numpy": "1.26.4",
+    "scipy": "1.13.1",
+    "pandas": "2.3.3",
+    "ase": "3.29.0",
+    "phonopy": "2.38.2",
+    "matplotlib": "3.8.4",
+    "numba": "0.60.0"
+  },
+  "refit_M2": {
+    "metrics": {
+      "structures": 438,
+      "force_components": 52560,
+      "rmse_energy_meV_atom": 3.871142356509155,
+      "rmse_force_meV_A": 134.49834704045387
+    },
+    "relative_RMSE_difference": {
+      "rmse_energy_meV_atom": 4.034314115086763e-08,
+      "rmse_force_meV_A": 1.3702319288239436e-08
+    },
+    "within_one_percent": true,
+    "max_energy_prediction_difference_eV_atom": 1.3415842659014743e-08,
+    "max_force_prediction_difference_eV_A": 2.2208030418191527e-05
+  }
+}
