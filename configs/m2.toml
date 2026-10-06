@@ -1,0 +1,38 @@
+[data]
+trajectory = "../data/in/Training_set.xyz"
+training_indices = "../data/in/training_idx_70%.txt"
+
+[run]
+protocol = "grouped"
+seed = 42
+output_dir = "../data/out/runs"
+
+[basis]
+elements = ["Ti", "Ba", "O"]
+degree = 2
+# Intervalos de nodos; corresponden a 27 B-splines por par antes de restricciones.
+resolution = 24
+r_min = 0.001
+leading_trim = 0
+trailing_trim = 3
+
+[basis.cutoffs]
+"O-O" = 4.42
+"O-Ti" = 5.12
+"O-Ba" = 5.235
+"Ba-Ba" = 6.335
+"Ba-Ti" = 4.07
+"Ti-Ti" = 6.29
+
+[fit]
+ridge_1b = 1e-7
+ridge_2b = 0.0
+curvature_2b = 1e-5
+weight = 0.1
+repulsion = true
+
+[phonons]
+# Perfil del notebook M2; disp es Å, no porcentaje.
+lattice_constant_ang = 4.0
+displacement_ang = 0.05
+supercell = 3

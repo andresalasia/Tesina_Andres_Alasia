@@ -1,0 +1,43 @@
+[data]
+trajectory = "../data/in/Training_set.xyz"
+training_indices = "../data/in/training_idx_70%.txt"
+
+[run]
+protocol = "grouped"
+seed = 42
+output_dir = "../data/out/runs"
+
+[basis]
+elements = ["Ti", "Ba", "O"]
+degree = 2
+resolution = 24
+r_min = 0.001
+leading_trim = 0
+trailing_trim = 3
+
+[basis.cutoffs]
+# Radios de la grilla de demostración, diferentes de M2.
+"O-O" = 4.42
+"O-Ti" = 4.0
+"O-Ba" = 4.5
+"Ba-Ba" = 5.2
+"Ba-Ti" = 4.07
+"Ti-Ti" = 5.2
+
+[fit]
+ridge_1b = 1e-6
+ridge_2b = 0.0
+curvature_2b = 1e-10
+weight = 0.2
+repulsion = true
+
+[search]
+resolutions = [24, 25]
+ridge_1b = [1e-6]
+curvature_2b = [1e-10, 1e-9, 1e-8, 1e-7, 1e-6]
+weights = [0.2, 0.3]
+
+[phonons]
+lattice_constant_ang = 4.012
+displacement_ang = 0.05
+supercell = 3

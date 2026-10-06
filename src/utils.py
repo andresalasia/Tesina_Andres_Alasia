@@ -5,24 +5,23 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
-from os import mkdir, path
-from pyprojroot import here
+from pathlib import Path
+import traceback
+import warnings
+from uuid import uuid4
 
 from uf3.representation import bspline
 from uf3.representation import process
 from uf3.regression import least_squares
 from uf3.util import plotting
-from uf3.forcefield import calculator
-from uf3.forcefield.properties import phonon
 
 # Paths
-CURRENT_HOUR = datetime.now().strftime('%y_%m_%d_%H_%M')
-ROOT = here()
+CURRENT_HOUR = datetime.now().strftime('%y_%m_%d_%H_%M_%S_%f')
+ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / "data"
 DATA_IN_PATH = DATA_PATH / "in"
 DATA_OUT_PATH = DATA_PATH / "out"
 DATA_SELEC_HYP = DATA_OUT_PATH / CURRENT_HOUR
-mkdir(DATA_SELEC_HYP)
 
 
 # Params
@@ -66,6 +65,8 @@ def get_r_max_dict(n_vecinos):
         r_max_map_dict = {3:r_max_map_3}
     elif n_vecinos == [2,3]:
         r_max_map_dict = {2:r_max_map_2,3:r_max_map_3}
+    else:
+        raise ValueError("n_vecinos debe ser 2, 3 o [2, 3]; describe alcance radial, no orden de cuerpos.")
     return r_max_map_dict
 
 
@@ -112,14 +113,18 @@ def plot_err(y_e,p_e,y_f,p_f,kappa,n_vecinos,n_splines,reg_1b,curv_2b):
 
             curv_2b (float): regularizador l2. (para nombre archivo).
     """
+    for folder in ('error_e', 'error_f'):
+        (DATA_SELEC_HYP / folder).mkdir(parents=True, exist_ok=True)
     plotting.density_scatter(y_e, p_e, cmap='seismic')
     plt.tight_layout()
     plt.savefig(DATA_SELEC_HYP / f'error_e/rmse_e{n_vecinos}_vecinos_kappa_{int(kappa*1000)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}',
                 bbox_inches='tight')
+    plt.close()
     plotting.density_scatter(y_f, p_f, cmap='seismic')
     plt.tight_layout()
     plt.savefig(DATA_SELEC_HYP / f'error_f/rmse_f{n_vecinos}_vecinos_kappa_{int(kappa*1000)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}',
                 bbox_inches='tight')
+    plt.close()
 
 def plot_pot(bspline_config,solutions,kappa,n_vecinos,n_splines,reg_1b,curv_2b,zoom=False):
     """Plotear gráficas de los potenciales obtenidos
@@ -142,6 +147,7 @@ def plot_pot(bspline_config,solutions,kappa,n_vecinos,n_splines,reg_1b,curv_2b,z
 
             zoom (bool): hacer zoom o no en los potenciales.
     """
+    (DATA_SELEC_HYP / "pot").mkdir(parents=True, exist_ok=True)
     if zoom == False:
         fig, axes = plt.subplots(2, 3, figsize=(15, 6), dpi=200)
         for j, interaction in enumerate(bspline_config.interactions_map[2]):
@@ -182,154 +188,83 @@ def plot_pot(bspline_config,solutions,kappa,n_vecinos,n_splines,reg_1b,curv_2b,z
 def run_selec_hyper(chemical_system,n_splines_list,rango_reg_1,rango_reg_2,pesos_fuerza_energia,r_min_map,
                     r_max_map_dict,r_min_obs,df_data,client,energy_key,n_batches,training_keys,holdout_keys,
                     estruct,leading_trim=0,trailing_trim=3,plot=False,zoom=False):
+    """Compatibilidad con el notebook histórico, con entrenamiento aislado.
+
+    Cada candidato usa un modelo nuevo y las mismas matrices de entrenamiento.
+    Se conserva la firma y el diccionario de resultados del notebook. ``estruct``
+    ya no dispara fonones al graficar: usar ``poetry run tesina phonons`` para un
+    modelo seleccionado. El protocolo de esta interfaz es el holdout histórico;
+    para particiones agrupadas y reanudación usar ``poetry run tesina search``.
+    Los originales ``df_data``, ``training_keys`` y ``holdout_keys`` no se modifican.
     """
-    Se busca el conjunto óptimo de hiperparémtros por medio de una búsqueda en grilla, los hiperparámetros son el número 
-    de splines, el regularizador l1 en el primer término de la expansión del potencial, el regularizador l2 en la 
-    curvatura para cada interacción de pares y el peso que se le otorga a las fuerzas y a las energías en el ajuste
-    del potencial. Además del diccionario devuelto se guardan gráficas de los potenciales, los valores predichos de fuerza
-    y energía vs los reales en el conjunto test, la curva de dispersión de fonones y una serie de archivos .csv con los 
-    valores de rmse para fuerza y energía para cada conjunto de hiperparámetros de la grilla. Si se corre completamente el
-    script los .csv con un número en su nombre son irrelevantes pues su información está contenida en el restante.
+    from tesina.science import fit_model, save_model
+    from tesina.search import _atomic_csv, _atomic_json
 
-        Parameters:
-
-            chemical_system (uf3.data.composition.ChemicalSystem): clase que representa el sistema químico a 
-            estudiar.
-
-            n_splines_list (list[int]): lista con los números de splines que se quieren incluir en la grilla.
-
-            rango_reg_1 (list[float]): lista con los valores de regularizador l1 que se quieren incluir en la grilla.
-
-            rango_reg_2 (list[float]): lista con los valores de regularizador l2 que se quieren incluir en la grilla.
-
-            pesos_fuerza_energia (list[float]): lista con los valores peso que se quieren incluir en la grilla.
-
-            r_min_map (dict{tup(str):float}): diccionario que contiene la distancia mínima a evaluar para cada par.
-
-            r_max_map_dict (dict{int:dict{tup(str):float}}): diccionario que contiene la distancia máxima a evaluar para cada par.
-
-            r_min_obs (dict{tup(str):float}): diccionario que contiene la distancia mínima a observada en los datos 
-            para cada par.
-
-            df_data (pandas.DataFrame): tabla con los datos de las estructuras.
-
-            client (concurrent.futures.process.ProcessPoolExecutor): cliente para la featurización en paralelo.
-
-            n_batches (int): número de "trabajadores" en la featurización en paralelo.
-
-            training_keys (list[int]): ínidces de las estructuras de train en df_data.
-
-            holdout_keys (list[int]): ínidces de las estructuras de test en df_data.
-
-            estruct (ase.atoms.Atoms): estructura de la celda para el cálculo de la dispersión de fonones.
-
-            leading_trim (int,=0): cantidad de splines a recortar en r pequeños.
-
-            trailing_trim (int,=3): cantidad de splines a recortar en r grandes.
-
-            plot (bool,=False): 'True' indica plotear gráficas, 'False' no plotear.
-
-            zoom (bool,=False): un valor 'True' indica que las gráficas se plotean con zoom en valores pequeños del potencial.
-
-        Returns:
-
-            dict_resultados (dict): diccionario con el rmse en fuerza y energía para cada potencial de la grilla.
-    """
-    n_elements = len(chemical_system.element_list) 
-    dict_resultados = {"N_SPLINES": [], "REGULARIZADOR_1B": [], "REGULARIZADOR_2B": [],
-                       "RMSE_E (meV/atom)":  [], "RMSE_F (meV/angstrom)":  [], "kappa": [], "cantidad_vecinos": []}
-    bad_model = {"N_SPLINES": [], "REGULARIZADOR_1B": [], "REGULARIZADOR_2B": [], "kappa": [], "cantidad_vecinos": []}
-
+    global DATA_SELEC_HYP
+    if set(training_keys) & set(holdout_keys):
+        raise ValueError("Entrenamiento y holdout deben contener estructuras distintas.")
+    DATA_SELEC_HYP = DATA_OUT_PATH / (datetime.now().strftime('%y_%m_%d_%H_%M_%S_%f') + '-' + uuid4().hex[:8])
+    DATA_SELEC_HYP.mkdir(parents=True)
+    n_elements = len(chemical_system.element_list)
+    columns = ["N_SPLINES", "REGULARIZADOR_1B", "REGULARIZADOR_2B", "RMSE_E (meV/atom)",
+               "RMSE_F (meV/angstrom)", "kappa", "cantidad_vecinos"]
+    dict_resultados = {column: [] for column in columns}
+    failures = []
+    completed = []
     for n_vecinos, r_max_map in r_max_map_dict.items():
         for n_splines in n_splines_list:
-            # Se establece el número de splines para cada iteración y se instancia el objeto que represnta la base
-            resolution_map = create_res_map(n_splines,chemical_system)
-            bspline_config = bspline.BSplineBasis(chemical_system,
-                                                r_min_map=r_min_map,
-                                                r_max_map=r_max_map,
-                                                resolution_map=resolution_map,
-                                                leading_trim=leading_trim,
-                                                trailing_trim=trailing_trim)
-
-            # Calcular características para el modelado
+            bspline_config = bspline.BSplineBasis(chemical_system, r_min_map=r_min_map,
+                r_max_map=r_max_map, resolution_map=create_res_map(n_splines, chemical_system),
+                leading_trim=leading_trim, trailing_trim=trailing_trim)
             representation = process.BasisFeaturizer(bspline_config)
-            df_features = representation.evaluate_parallel(df_data,
-                                                        client,
-                                                        energy_key=energy_key,
-                                                        n_jobs=n_batches)
-
-            # Puesta a punto de los datos para el ajuste
-            df_slice = df_features.loc[training_keys]
-            x_e, y_e, x_f, y_f = least_squares.dataframe_to_tuples(df_slice,                # x: cracterísticas utilizadas para entrenar y: target
-                                                                n_elements=n_elements,
-                                                                energy_key="energy")
+            if client is None:
+                df_features = representation.evaluate(df_data, energy_key=energy_key)
+            else:
+                df_features = representation.evaluate_parallel(df_data, client, energy_key=energy_key, n_jobs=n_batches)
+            train_tuples = least_squares.dataframe_to_tuples(df_features.loc[training_keys], n_elements=n_elements, energy_key="energy")
+            valid_x_e, valid_y_e, valid_x_f, valid_y_f = least_squares.dataframe_to_tuples(
+                df_features.loc[holdout_keys], n_elements=n_elements, energy_key="energy")
             for reg_1b in rango_reg_1:
                 for curv_2b in rango_reg_2:
-                    # Regularizador
-                    regularizer = bspline_config.get_regularization_matrix(ridge_1b=reg_1b,
-                                                                        ridge_2b=0,
-                                                                        curvature_2b=curv_2b)
-                    # Definición del tipo modelo
-                    model = least_squares.WeightedLinearModel(bspline_config,
-                                                            regularizer=regularizer)
-                    for kappa in pesos_fuerza_energia:                    
+                    for kappa in pesos_fuerza_energia:
+                        parameters = {"N_SPLINES": n_splines, "REGULARIZADOR_1B": reg_1b,
+                                      "REGULARIZADOR_2B": curv_2b, "kappa": kappa, "cantidad_vecinos": n_vecinos}
                         try:
-                            model.fit(x_e, y_e, x_f, y_f, weight=kappa)
-                        except:
-                            bad_model['cantidad_vecinos'].append(n_vecinos)
-                            bad_model['kappa'].append(kappa)
-                            bad_model['N_SPLINES'].append(n_splines)
-                            bad_model['REGULARIZADOR_1B'].append(reg_1b)
-                            bad_model['REGULARIZADOR_2B'].append(curv_2b)
+                            model = fit_model(bspline_config, train_tuples,
+                                {"ridge_1b": reg_1b, "ridge_2b": 0, "curvature_2b": curv_2b, "weight": kappa},
+                                repulsion_bounds=r_min_obs)
+                            predicted_e = model.predict(valid_x_e)
+                            predicted_f = model.predict(valid_x_f)
+                            row = {**parameters,
+                                   "RMSE_E (meV/atom)": float(np.sqrt(np.mean((valid_y_e - predicted_e)**2)) * 1000),
+                                   "RMSE_F (meV/angstrom)": float(np.sqrt(np.mean((valid_y_f - predicted_f)**2)) * 1000)}
+                            if not np.isfinite([row["RMSE_E (meV/atom)"], row["RMSE_F (meV/angstrom)"]]).all():
+                                raise ValueError("El ajuste produjo métricas no finitas.")
+                            model_dir = DATA_SELEC_HYP / 'models'
+                            model_dir.mkdir(exist_ok=True)
+                            save_model(model, model_dir / f'model_{len(completed):04d}.json')
+                        except Exception as error:
+                            failures.append({**parameters, "error_type": type(error).__name__,
+                                             "error": str(error), "traceback": traceback.format_exc()})
+                            warnings.warn(f"Falló candidato {parameters}: {type(error).__name__}: {error}", RuntimeWarning)
                         else:
-                            # Fixear repulsión a distancias cortas
-                            for pair, r_min in r_min_obs.items():
-                                r_target = r_min
-                                model.fix_repulsion_2b(pair,r_target=r_target,min_curvature=0.0)
-                            df_holdout = df_features.loc[holdout_keys]
-                            x_e, y_e, x_f, y_f = least_squares.dataframe_to_tuples(df_holdout,          # x: cracterísticas de 
-                                                                            n_elements=n_elements,      # las estructuras donde
-                                                                            energy_key="energy")        # se predice  y: target
-                            # Predicciones
-                            p_e = model.predict(x_e)
-                            p_f = model.predict(x_f)
-                            rmse_e = np.sqrt(np.mean(np.subtract(y_e, p_e)**2))
-                            rmse_f = np.sqrt(np.mean(np.subtract(y_f, p_f)**2))
-
-                            # Agregar datos a DataFrame de resultados
-                            dict_resultados['cantidad_vecinos'].append(n_vecinos)
-                            dict_resultados['kappa'].append(kappa)
-                            dict_resultados['N_SPLINES'].append(n_splines)
-                            dict_resultados['REGULARIZADOR_1B'].append(reg_1b)
-                            dict_resultados['REGULARIZADOR_2B'].append(curv_2b)
-                            dict_resultados['RMSE_E (meV/atom)'].append(rmse_e*1000)
-                            dict_resultados['RMSE_F (meV/angstrom)'].append(rmse_f*1000)
-                            
-                            # Graficas
+                            completed.append(row)
+                            for column in columns:
+                                dict_resultados[column].append(row[column])
+                            # Persistir antes de gráficos: una interrupción conserva el ajuste.
+                            _atomic_csv(DATA_SELEC_HYP / 'resultados.csv', completed, columns)
+                            _atomic_json(DATA_SELEC_HYP / 'failures.json', failures)
                             if plot:
-                                for folder in ['error_e', 'error_f', 'pot', 'fonones']:
-                                    if not path.exists(DATA_SELEC_HYP / folder):
-                                        mkdir(DATA_SELEC_HYP / folder)
-                                # Plotear y guardar gráficas errores
-                                plot_err(y_e,p_e,y_f,p_f,kappa,n_vecinos,n_splines,reg_1b,curv_2b)                            
-
-                                # Plotear potenciales
-                                solutions = least_squares.arrange_coefficients(model.coefficients,
-                                                                        bspline_config)
-                                plot_pot(bspline_config,solutions,kappa,n_splines,reg_1b,curv_2b,zoom)
-
-                                # Dispersión de fonones
-                                calc = calculator.UFCalculator(model)
-                                force_constants, path_data, bands_dict = calc.get_phonon_data(atoms=estruct, n_super=3, disp=0.05)
-                                fig_ax=phonon.plot_phonon_spectrum(path_data=path_data,bands_dict=bands_dict, lw=0.3)
-                                plt.savefig(DATA_SELEC_HYP / f'fonones/fonones_{n_vecinos}_vecinos_kappa_{int(kappa*100)}_{n_splines}_splines_reg1_{reg_1b:.0E}_reg2_{curv_2b:.0E}')
+                                plot_err(y_e=valid_y_e, p_e=predicted_e, y_f=valid_y_f, p_f=predicted_f,
+                                         kappa=kappa, n_vecinos=n_vecinos, n_splines=n_splines,
+                                         reg_1b=reg_1b, curv_2b=curv_2b)
+                                solutions = least_squares.arrange_coefficients(model.coefficients, bspline_config)
+                                plot_pot(bspline_config=bspline_config, solutions=solutions, kappa=kappa,
+                                         n_vecinos=n_vecinos, n_splines=n_splines, reg_1b=reg_1b,
+                                         curv_2b=curv_2b, zoom=zoom)
                                 plt.close('all')
-            # Guardado parcial y final de la info
-            dataframe_resultados_splines = pd.DataFrame(dict_resultados)
-            dataframe_resultados_splines.to_csv(DATA_SELEC_HYP / f'resultados_{n_splines}_{n_vecinos}.csv')
-
-    # Guardado de modelos no ajustados 
-    df_bad = pd.DataFrame(bad_model)
-    df_bad.to_csv(DATA_SELEC_HYP / 'bad_models.csv')
-
+                        _atomic_csv(DATA_SELEC_HYP / 'resultados.csv', completed, columns)
+                        _atomic_csv(DATA_SELEC_HYP / 'bad_models.csv', failures)
+                        _atomic_json(DATA_SELEC_HYP / 'failures.json', failures)
+            _atomic_csv(DATA_SELEC_HYP / f'resultados_{n_splines}_{n_vecinos}.csv', completed, columns)
     return dict_resultados
